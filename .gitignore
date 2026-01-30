@@ -25,3 +25,6 @@ app/build/
 
 # Metadata
 output-metadata.json
+
+# Secrets
+SupabaseConfig.java

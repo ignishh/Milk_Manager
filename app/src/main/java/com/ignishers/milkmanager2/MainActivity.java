@@ -9,44 +9,60 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.textfield.TextInputEditText;
+import com.ignishers.milkmanager2.viewmodel.LoginViewModel;
 
 public class MainActivity extends AppCompatActivity {
 
     private TextInputEditText etUsername;
     private TextInputEditText etPassword;
     private Button btnLogin;
+    private LoginViewModel viewModel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        viewModel = new androidx.lifecycle.ViewModelProvider(this).get(LoginViewModel.class);
+
         etUsername = findViewById(R.id.etUsername);
         etPassword = findViewById(R.id.etPassword);
         btnLogin = findViewById(R.id.btnLogin);
 
+        // Observe Login Result (Toast Only)
+        viewModel.getLoginResult().observe(this, result -> {
+            if (result.startsWith("Error") || result.startsWith("Profile Error")) {
+                Toast.makeText(MainActivity.this, result, Toast.LENGTH_LONG).show();
+            }
+        });
+
+        // Observe Navigation Event
+        viewModel.getNavigateTo().observe(this, role -> {
+            if ("ADMIN".equals(role)) {
+                Intent intent = new Intent(MainActivity.this, AdminDashboardActivity.class);
+                startActivity(intent);
+                finish();
+            } else if ("SELLER".equals(role)) {
+                Intent intent = new Intent(MainActivity.this, DashboardActivity.class);
+                startActivity(intent);
+                finish();
+            }
+        });
+
+        // Observe Loading State
+        viewModel.getIsLoading().observe(this, isLoading -> {
+            btnLogin.setEnabled(!isLoading);
+            if (isLoading) {
+                btnLogin.setText("Logging in...");
+            } else {
+                btnLogin.setText("Login");
+            }
+        });
+
         btnLogin.setOnClickListener(v -> {
             String username = etUsername.getText().toString().trim();
             String password = etPassword.getText().toString().trim();
-
-            if (validateLogin(username, password)) {
-                // Navigate to Dashboard
-                Intent intent = new Intent(MainActivity.this, DashboardActivity.class);
-                startActivity(intent);
-                finish(); // Close Login Activity so back button doesn't return here immediately
-            } else {
-                Toast.makeText(MainActivity.this, "Invalid credentials", Toast.LENGTH_SHORT).show();
-            }
+            viewModel.login(username, password);
         });
-    }
-
-    private boolean validateLogin(String username, String password) {
-        // Placeholder validation logic
-        // For now, allow any non-empty input or specific test credentials
-        if (username.isEmpty() || password.isEmpty()) {
-            Toast.makeText(this, "Please enter username and password", Toast.LENGTH_SHORT).show();
-            return false;
-        }
-        return true; 
     }
 }

@@ -6,10 +6,6 @@
         android:title="Default Quantity"
         app:showAsAction="never" />
     <item
-        android:id="@+id/action_move_customer"
-        android:title="Move Customer"
-        app:showAsAction="never" />
-    <item
         android:id="@+id/action_bill"
         android:title="Bill"
         app:showAsAction="never" />

@@ -22,6 +22,10 @@ public class NavigationAdapter
     public interface OnItemClickListener {
         void onFolderClick(long groupId);
         void onCustomerClick(long customerId);
+        
+        // Long Click Events
+        void onFolderLongClick(RouteGroup group);
+        void onCustomerLongClick(Customer customer);
     }
 
     private final List<NavItem> items = new ArrayList<>();
@@ -93,6 +97,10 @@ public class NavigationAdapter
             name.setText(g.name);
             itemView.setOnClickListener(v ->
                     listener.onFolderClick(g.id));
+            itemView.setOnLongClickListener(v -> {
+                listener.onFolderLongClick(g);
+                return true; 
+            });
         }
     }
 
@@ -115,6 +123,10 @@ public class NavigationAdapter
             name.setText(c.name);
             itemView.setOnClickListener(v ->
                     listener.onCustomerClick(c.id));
+            itemView.setOnLongClickListener(v -> {
+                listener.onCustomerLongClick(c);
+                return true;
+            });
         }
     }
 }

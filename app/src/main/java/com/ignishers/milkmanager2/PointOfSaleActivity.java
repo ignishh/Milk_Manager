@@ -29,11 +29,13 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
     private TextView tvName, tvNumber, tvDues, tvMonthDues;
     private RecyclerView rvTodayEntries;
     private DailyTransactionAdapter adapter;
+    private android.view.View mainContentView;
 
     // Swipe Navigation
-    private androidx.core.view.GestureDetectorCompat gestureDetector;
+    private android.view.GestureDetector gestureDetector;
     private List<Customer> groupCustomers;
     private int currentCustomerIndex = -1;
+    private boolean isNavigating = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,7 +55,9 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
         tvNumber = findViewById(R.id.tvNumber);
         tvDues = findViewById(R.id.tvDues);
         tvMonthDues = findViewById(R.id.tvMonthDues);
+        tvMonthDues = findViewById(R.id.tvMonthDues);
         rvTodayEntries = findViewById(R.id.rvTodayEntries);
+        mainContentView = findViewById(R.id.mainContent);
 
         customerDAO = new CustomerDAO(this);
         dailyTransactionDAO = new DailyTransactionDAO(this);
@@ -72,7 +76,7 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
         // Initial Load
         loadInitialCustomer(customerId);
         
-        // Setup Gesture Detector
+        // Setup Gesture Detector (No Animation)
         setupSwipeNavigation();
         
         // Setup Month Summary Click
@@ -106,11 +110,10 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
         } else if (item.getItemId() == R.id.action_edit_default_qty) {
             showEditDefaultQtyDialog();
             return true;
-        } else if (item.getItemId() == R.id.action_move_customer) {
-            initiateMoveCustomer();
-            return true;
         } else if (item.getItemId() == R.id.action_bill) {
-            android.widget.Toast.makeText(this, "Bill feature coming soon!", android.widget.Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(this, BillActivity.class);
+            intent.putExtra("customerId", customer.id);
+            startActivity(intent);
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -140,14 +143,8 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
         builder.show();
     }
     
-    private void initiateMoveCustomer() {
-        com.ignishers.milkmanager2.utils.CustomerClipboard.copy(customer.id, customer.name);
-        android.widget.Toast.makeText(this, "Customer Cut! Navigate to new folder and Click Paste.", android.widget.Toast.LENGTH_LONG).show();
-        finish(); // Return to dashboard to navigate
-    }
-    
     private void setupSwipeNavigation() {
-        gestureDetector = new androidx.core.view.GestureDetectorCompat(this, new android.view.GestureDetector.SimpleOnGestureListener() {
+        gestureDetector = new android.view.GestureDetector(this, new android.view.GestureDetector.SimpleOnGestureListener() {
             private static final int SWIPE_THRESHOLD = 100;
             private static final int SWIPE_VELOCITY_THRESHOLD = 100;
 
@@ -158,16 +155,18 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
 
             @Override
             public boolean onFling(@androidx.annotation.Nullable android.view.MotionEvent e1, @androidx.annotation.NonNull android.view.MotionEvent e2, float velocityX, float velocityY) {
-                if (e1 == null) return false;
-                
+                if (e1 == null || e2 == null) return false;
+
                 float diffY = e2.getY() - e1.getY();
                 float diffX = e2.getX() - e1.getX();
                 if (Math.abs(diffX) > Math.abs(diffY)) {
                     if (Math.abs(diffX) > SWIPE_THRESHOLD && Math.abs(velocityX) > SWIPE_VELOCITY_THRESHOLD) {
-                        if (diffX > 0) {
-                            onSwipeRight();
-                        } else {
-                            onSwipeLeft();
+                        if (!isNavigating) { // Prevent rapid swipes
+                            if (diffX > 0) {
+                                onSwipeRight();
+                            } else {
+                                onSwipeLeft();
+                            }
                         }
                         return true;
                     }
@@ -175,7 +174,6 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
                 return false;
             }
         });
-        
     }
 
     @Override
@@ -185,12 +183,12 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
         }
         return super.dispatchTouchEvent(ev);
     }
-    
+
     private void onSwipeLeft() { // Next Customer
         if (groupCustomers != null && currentCustomerIndex < groupCustomers.size() - 1) {
             loadCustomerByIndex(currentCustomerIndex + 1);
         } else {
-             android.widget.Toast.makeText(this, "No more customers", android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(this, "No more customers", android.widget.Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -271,18 +269,11 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
             }
         }
         
-        // Logic:
-        // User wants "Last Month Due" to be the remainder of the total debt after subtracting the current month's bill.
-        // If a payment is made, it reduces the Total Due, and thus naturally reduces this "Last Month Due" figure.
-        // Formula: Last Month Due = Total Due - Current Month Bill
-        
         double lastMonthDue = customer.currentDue - currentMonthDue;
         
         // Update UI
-        // 1. Month Dues TextView now shows "Last Month Due"
         tvMonthDues.setText(String.format("Last Month Due: %.2f", lastMonthDue));
         
-        // 2. New TextView for Current Month Bill
         TextView tvCurrentMonth = findViewById(R.id.tvCurrentMonthTotal);
         if (tvCurrentMonth != null) { 
             tvCurrentMonth.setText(String.format("Current Month Bill: %.2f", currentMonthDue));
@@ -294,6 +285,7 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
         String today = LocalDate.now().toString();
         List<DailyTransaction> list = dailyTransactionDAO.getTransactionsByDate(customer.id, today);
         adapter.submitList(list);
+        rvTodayEntries.scheduleLayoutAnimation();
     }
 
     private void showDeleteDialog(DailyTransaction transaction) {
@@ -302,18 +294,15 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
                 .setMessage("Are you sure you want to delete this entry?")
                 .setPositiveButton("Delete", (dialog, which) -> {
                     if (transaction.getSession().startsWith("Payment")) {
-                        // If deleting a payment, we must ASC (Add) the amount back to dues
                          customerDAO.updateCustomerDue(customer.id, transaction.getAmount());
                     } else {
-                        // Reduce the amount from customer dues (normal entry)
                         customerDAO.updateCustomerDue(customer.id, -transaction.getAmount());
                     }
                     
                     dailyTransactionDAO.delete(transaction.getTransactionId());
                     loadTodayEntries();
-                    updateMonthTotal();
-                    // Refresh Dues UI
                     customer = customerDAO.getCustomer(String.valueOf(customer.id));
+                    updateMonthTotal();
                     if (customer != null) {
                         tvDues.setText(String.format("Dues: %.2f", customer.currentDue));
                     }
@@ -326,15 +315,13 @@ public class PointOfSaleActivity extends AppCompatActivity implements MilkEntryF
     public void onEntryAdded() {
         runOnUiThread(() -> {
             loadTodayEntries();
-            updateMonthTotal();
-            // Refresh customer data to get updated dues
             customer = customerDAO.getCustomer(String.valueOf(customer.id));
+            updateMonthTotal();
             if (customer != null) {
                 tvDues.setText(String.format("Dues: %.2f", customer.currentDue));
             }
         });
     }
-
 
     private void showMonthSummary() {
          if (customer == null) return;

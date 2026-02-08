@@ -20,25 +20,23 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.ignishers.milkmanager2.DAO.CustomerDAO;
 import com.ignishers.milkmanager2.DAO.DBHelper;
+import com.ignishers.milkmanager2.DAO.DailyTransactionDAO;
 import com.ignishers.milkmanager2.DAO.RouteGroupDAO;
 import com.ignishers.milkmanager2.adapter.NavigationAdapter;
 import com.ignishers.milkmanager2.model.Customer;
 import com.ignishers.milkmanager2.model.NavigationManager;
 import com.ignishers.milkmanager2.model.RouteGroup;
+import com.ignishers.milkmanager2.utils.DialogUtils; 
 
 import java.util.List;
 
-
-
-/*
-*   This is the dashboard activity, formerly MainActivity
- */
 public class DashboardActivity extends AppCompatActivity implements AddCustomerDialogFragment.OnCustomerCreatedListener {
 
 
     DBHelper dbHelper;
     RouteGroupDAO groupDAO;
     CustomerDAO customerDAO;
+    DailyTransactionDAO dailyTransactionDAO;
     NavigationManager navManager;
     RecyclerView recyclerView;
     NavigationAdapter adapter;
@@ -54,6 +52,7 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
         groupDAO = new RouteGroupDAO(this);
         groupDAO.ensureRootRouteExists();
         customerDAO = new CustomerDAO(this);
+        dailyTransactionDAO = new DailyTransactionDAO(this);
         navManager = new NavigationManager();
 
 
@@ -64,6 +63,7 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
         int resId = R.anim.layout_animation_fall_down;
         android.view.animation.LayoutAnimationController animation = android.view.animation.AnimationUtils.loadLayoutAnimation(this, resId);
         recyclerView.setLayoutAnimation(animation);
+        
         adapter = new NavigationAdapter(new NavigationAdapter.OnItemClickListener() {
             @Override
             public void onFolderClick(long groupId) {
@@ -74,25 +74,19 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
             public void onCustomerClick(long customerId) {
                 onCustomerClicked(customerId);
             }
+
+            @Override
+            public void onFolderLongClick(RouteGroup group) {
+                handleFolderOptions(group);
+            }
+
+            @Override
+            public void onCustomerLongClick(Customer customer) {
+                handleCustomerOptions(customer);
+            }
         });
         recyclerView.setAdapter(adapter);
 
-
-
-
-
-
-
-
-
-
-
-
-///-----------------------------------------------------------------------------
-///-----------------------------------------------------------------------------
-        /// ---------------------------------------------------------
-        /// NEW: Floating Action Button Logic for creating customers
-        /// ---------------------------------------------------------
         FloatingActionButton fab = findViewById(R.id.fab);
         fab.setOnClickListener(v -> {
             Long currentGroupId = navManager.getCurrentGroup();
@@ -102,11 +96,6 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
                     .show(getSupportFragmentManager(), "CreateCustomer");
         });
 
-///-----------------------------------------------------------------------------
-///-----------------------------------------------------------------------------
-/// ---------------------------------------------------------
-/// NEW: Floating Action Button Logic for creating Group
-/// ---------------------------------------------------------
         FloatingActionButton fab2 = findViewById(R.id.fab2);
         fab2.setOnClickListener(v -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
@@ -120,18 +109,13 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
                 String name = input.getText().toString().trim();
 
                 if (!name.isEmpty()) {
-                    // 1. Get current location (Parent ID)
-                    // If we are at root, parent is 0 (from our new logic)
                     Long currentParent = navManager.getCurrentGroup();
                     if(currentParent == null) currentParent = 0L;
 
-                    /// Change method to take object argument of RouteGroup
-                    // 2. Insert into DB
                     boolean success = groupDAO.insertGroup(name, currentParent);
 
                     if (success) {
                         Toast.makeText(DashboardActivity.this, "Route Created!", Toast.LENGTH_SHORT).show();
-                        // 3. Refresh the list immediately
                         loadCurrentLevel();
                     } else {
                         Toast.makeText(DashboardActivity.this, "Error creating route", Toast.LENGTH_SHORT).show();
@@ -142,12 +126,8 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
             builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
             builder.show();
         });
-///        Floating Action Button Logic Ended
 
 
-///---------------------------------------------------------------------------------
-///----------------------------------------------------------------------------------
-///        Setting up the toolbar, the dropdown menu and the navigation drawer
         MaterialToolbar toolbar = findViewById(R.id.topAppBar);
         setSupportActionBar(toolbar);
         toolbar.setNavigationOnClickListener(new View.OnClickListener() {
@@ -157,7 +137,6 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
             }
         });
 
-        // Navigate to root on toolbar click
         toolbar.setOnClickListener(v -> {
             if (!navManager.isAtRoot()) {
                 navManager.clear();
@@ -165,7 +144,6 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
                 Toast.makeText(DashboardActivity.this, "Returned to Dashboard", Toast.LENGTH_SHORT).show();
             }
         });
-///        Ending of toolbar setup
 
         getOnBackPressedDispatcher().addCallback(
                 this,
@@ -177,7 +155,6 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
                             navManager.goBack();
                             loadCurrentLevel();
                         } else {
-                            // Disable callback to avoid infinite loop
                             setEnabled(false);
                             getOnBackPressedDispatcher().onBackPressed();
                         }
@@ -187,13 +164,7 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
 
 
         loadCurrentLevel();
-/// --------------------------------------------------------------------------------
-///---------------------Ending of OnCreate--------------------------------------------------
-///-----------------------------------------------------------------------------------------
     }
-
-
-
 
     private void onFolderClicked(long groupId) {
         navManager.enterGroup(groupId);
@@ -206,8 +177,111 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
         startActivity(intent);
     }
 
+    // NEW: Open Bottom Sheet Options instead of old Dialog
+    private void handleFolderOptions(RouteGroup group) {
+        showOptionsBottomSheet(
+            group.name,
+            "Folder Options",
+            false,
+            null,
+            () -> attemptDeleteFolder(group)
+        );
+    }
 
+    private void attemptDeleteFolder(RouteGroup group) {
+        List<RouteGroup> subGroups = groupDAO.getChildGroups(group.id);
+        List<Customer> customers = customerDAO.getCustomersByGroup(group.id);
 
+        if (subGroups.isEmpty() && customers.isEmpty()) {
+            DialogUtils.showWarningDialog(this,
+                    "Delete Folder?",
+                    "Are you sure you want to delete '" + group.name + "'? This action cannot be undone.",
+                    "Delete",
+                    () -> {
+                        groupDAO.deleteGroup(group.id);
+                        Toast.makeText(this, "Folder Deleted", Toast.LENGTH_SHORT).show();
+                        loadCurrentLevel();
+                    });
+        } else {
+            new AlertDialog.Builder(this)
+                    .setTitle("Cannot Delete")
+                    .setMessage("Folder is not empty. Please remove all sub-folders and customers first.")
+                    .setPositiveButton("OK", null)
+                    .show();
+        }
+    }
+
+    // NEW: Open Bottom Sheet Options
+    private void handleCustomerOptions(Customer customer) {
+         showOptionsBottomSheet(
+            customer.name,
+            "Customer Options",
+            true,
+            () -> initiateMoveCustomer(customer),
+            () -> attemptDeleteCustomer(customer)
+        );
+    }
+    
+    // NEW: Helper to show Bottom Sheet
+    private void showOptionsBottomSheet(String title, String subtitle, boolean canMove, Runnable onMove, Runnable onDelete) {
+        com.google.android.material.bottomsheet.BottomSheetDialog sheet = new com.google.android.material.bottomsheet.BottomSheetDialog(this);
+        View view = getLayoutInflater().inflate(R.layout.layout_options_bottom_sheet, null);
+        sheet.setContentView(view);
+        
+        ((TextView)view.findViewById(R.id.tvSheetTitle)).setText(title);
+        ((TextView)view.findViewById(R.id.tvSheetSubtitle)).setText(subtitle);
+        
+        View moveOption = view.findViewById(R.id.optionMove);
+        if (canMove) {
+            moveOption.setVisibility(View.VISIBLE);
+            moveOption.setOnClickListener(v -> {
+                sheet.dismiss();
+                if (onMove != null) onMove.run();
+            });
+        } else {
+            moveOption.setVisibility(View.GONE);
+        }
+        
+        View deleteOption = view.findViewById(R.id.optionDelete);
+        deleteOption.setOnClickListener(v -> {
+            sheet.dismiss();
+            if (onDelete != null) onDelete.run();
+        });
+        
+        sheet.show();
+    }
+
+    private void initiateMoveCustomer(Customer customer) {
+        com.ignishers.milkmanager2.utils.CustomerClipboard.copy(customer.id, customer.name);
+        Toast.makeText(this, "Customer Cut! Navigate to new folder and Click Paste.", Toast.LENGTH_LONG).show();
+        checkClipboard(); // Update UI
+    }
+
+    private void attemptDeleteCustomer(Customer customer) {
+        // Double check dues from DB to be sure
+        Customer freshCust = customerDAO.getCustomer(String.valueOf(customer.id));
+        if (freshCust == null) return;
+
+        // Tolerance for floating point
+        if (Math.abs(freshCust.currentDue) > 0.01) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Cannot Delete")
+                    .setMessage("Customer has pending dues (" + freshCust.currentDue + "). Please clear dues before deleting.")
+                    .setPositiveButton("OK", null)
+                    .show();
+        } else {
+            DialogUtils.showWarningDialog(this,
+                    "Delete Customer?",
+                    "Are you sure? This will delete '" + customer.name + "' and ALL their transactions permanently.",
+                    "Delete Forever",
+                    () -> {
+                        dailyTransactionDAO.deleteAllForCustomer(customer.id);
+                        customerDAO.deleteCustomer(customer.id);
+                        Toast.makeText(this, "Customer Deleted", Toast.LENGTH_SHORT).show();
+                        loadCurrentLevel();
+                    });
+        }
+    }
 
     private void loadCurrentLevel() {
         Long currentGroupId = navManager.getCurrentGroup();
@@ -223,16 +297,12 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
             customers = customerDAO.getCustomersByGroup(currentGroupId);
         }
 
-
-                adapter.submit(groups, customers);
-                // DEBUG: Remove after verification
-                // Toast.makeText(this, "Folders: " + groups.size() + " Cust: " + customers.size(), Toast.LENGTH_SHORT).show();
-
+        adapter.submit(groups, customers);
         updateBreadcrumbs();
     }
 
     private void updateBreadcrumbs() {
-        StringBuilder pathBuilder = new StringBuilder("root");
+        StringBuilder pathBuilder = new StringBuilder("/");
         String title = "Dashboard";
 
         Stack<Long> stack = navManager.getPathStack();
@@ -254,45 +324,28 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
             String date = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("EEE, dd MMM yyyy"));
             getSupportActionBar().setSubtitle(date);
         }
-
-
-
-
-
-
-
-
-
-
-
     }
 
-    ///  Toolbar Important Functions
     private void showNavigationDrawer(View anchorView) {
         MaterialToolbar toolbar = findViewById(R.id.topAppBar);
         
-        // 1. Play Dots -> Lines
         toolbar.setNavigationIcon(androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.avd_dots_to_lines));
         android.graphics.drawable.Drawable icon = toolbar.getNavigationIcon();
         if (icon instanceof android.graphics.drawable.Animatable) {
             ((android.graphics.drawable.Animatable) icon).start();
         }
-        
-        // 2. Snap to Lines (Hamburger) after animation ensures it stays open
-        // (Wait for ~400ms cover animation)
+    
         toolbar.postDelayed(() -> {
              toolbar.setNavigationIcon(R.drawable.vec_menu_lines);
         }, 450);
 
         MainMenuBottomSheet bottomSheet = new MainMenuBottomSheet();
         bottomSheet.setDismissAction(() -> {
-            // 3. Play Lines -> Dots
             toolbar.setNavigationIcon(androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.avd_lines_to_dots));
             android.graphics.drawable.Drawable closeIcon = toolbar.getNavigationIcon();
             if (closeIcon instanceof android.graphics.drawable.Animatable) {
                 ((android.graphics.drawable.Animatable) closeIcon).start();
             }
-            // 4. Snap back to Dots
             toolbar.postDelayed(() -> {
                  toolbar.setNavigationIcon(R.drawable.vec_menu_dots);
             }, 450);
@@ -301,7 +354,6 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
         bottomSheet.setListener(new MainMenuBottomSheet.OnMenuItemClickListener() {
             @Override
             public void onSalesRecordClick() {
-                // Handle Sales Record Click
                 Intent intent = new Intent(DashboardActivity.this, SalesReportActivity.class);
                 startActivity(intent);
             }
@@ -313,27 +365,20 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
 
             @Override
             public void onSettingsClick() {
-                // Handle Settings Click
                 Toast.makeText(DashboardActivity.this, "Settings Comming Soon", Toast.LENGTH_SHORT).show();
             }
         });
         
         bottomSheet.show(getSupportFragmentManager(), "MainMenu");
     }
-///    Toolbar Function Ended
 
-
-    /// ---------------------------------------------------------
-    /// NEW: Lifecycle method to fetch data when app is visible
-    /// ---------------------------------------------------------
     @Override
     protected void onResume() {
         super.onResume();
-        refresh();/// Ensures updated dues appear immediately
+        refresh();
         checkClipboard();
     }
     
-    // Check if we need to show Paste Button
     private void checkClipboard() {
         if (com.ignishers.milkmanager2.utils.CustomerClipboard.hasClip()) {
              FloatingActionButton fabPaste = findViewById(R.id.fabPaste);
@@ -345,6 +390,7 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
              FloatingActionButton fabPaste = findViewById(R.id.fabPaste);
              if (fabPaste != null) fabPaste.setVisibility(View.GONE);
         }
+        invalidateOptionsMenu();
     }
     
     private void showPasteDialog(String custName) {
@@ -353,20 +399,44 @@ public class DashboardActivity extends AppCompatActivity implements AddCustomerD
              .setMessage("Move '" + custName + "' to current folder?")
              .setPositiveButton("Paste", (dialog, which) -> {
                  Long currentGroupId = navManager.getCurrentGroup();
-                 // If null, we are at root (0 or null in DB, depending on impl)
-                 // CustomerDAO treats 0 or NULL strictly. Let's send 0 if root.
                  long targetRouteId = (currentGroupId == null) ? 0 : currentGroupId;
                  
                  customerDAO.updateCustomerRoute(com.ignishers.milkmanager2.utils.CustomerClipboard.getCustomerId(), targetRouteId);
                  
                  com.ignishers.milkmanager2.utils.CustomerClipboard.clear();
-                 checkClipboard(); // Hide FAB
-                 loadCurrentLevel(); // Refresh List
+                 checkClipboard(); 
+                 loadCurrentLevel(); 
                  
                  Toast.makeText(this, "Customer Moved Successfully", Toast.LENGTH_SHORT).show();
              })
              .setNegativeButton("Cancel", null)
              .show();
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(android.view.Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_dashboard, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(android.view.Menu menu) {
+        android.view.MenuItem cancelItem = menu.findItem(R.id.action_cancel_move);
+        if (cancelItem != null) {
+            cancelItem.setVisible(com.ignishers.milkmanager2.utils.CustomerClipboard.hasClip());
+        }
+        return super.onPrepareOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@androidx.annotation.NonNull android.view.MenuItem item) {
+        if (item.getItemId() == R.id.action_cancel_move) {
+            com.ignishers.milkmanager2.utils.CustomerClipboard.clear();
+            checkClipboard();
+            Toast.makeText(this, "Move Cancelled", Toast.LENGTH_SHORT).show();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     private void refresh() {

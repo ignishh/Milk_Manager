@@ -21,6 +21,7 @@
         android:background="@color/primary"
         app:navigationIcon="@drawable/vec_menu_dots"
         app:title="@string/dashboard"
+        android:paddingBottom="2dp"
         app:titleCentered="true"
         app:titleTextColor="@color/on_secondary" >
 
@@ -42,12 +43,12 @@
             android:id="@+id/textPath"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingStart="16dp"
+            android:paddingStart="8dp"
             android:paddingEnd="16dp"
-            android:paddingBottom="8dp"
+            android:paddingBottom="4dp"
             android:singleLine="true"
             android:ellipsize="start"
-            android:text="root"
+            android:text="/"
             android:textColor="@color/on_secondary"
             android:textStyle="italic"
             android:background="@color/primary" />

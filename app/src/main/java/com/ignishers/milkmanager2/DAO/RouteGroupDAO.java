@@ -61,6 +61,11 @@ public class RouteGroupDAO {
         long result = db.insert("route_group", null, cv);
         return result != -1;
     }
+
+    public boolean deleteGroup(long groupId) {
+        return db.delete("route_group", "group_id = ?", new String[]{String.valueOf(groupId)}) > 0;
+    }
+
     // List All Groups (for Selection Dialog)
     public List<RouteGroup> getAllGroups() {
         List<RouteGroup> list = new ArrayList<>();

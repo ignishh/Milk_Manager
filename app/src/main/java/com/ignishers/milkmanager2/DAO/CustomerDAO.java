@@ -122,4 +122,8 @@ public class CustomerDAO {
         cv.put("route_id_fk", newRouteId);
         db.update("customer", cv, "customer_id = ?", new String[]{String.valueOf(customerId)});
     }
+    
+    public void deleteCustomer(long customerId) {
+        db.delete("customer", "customer_id = ?", new String[]{String.valueOf(customerId)});
+    }
 }

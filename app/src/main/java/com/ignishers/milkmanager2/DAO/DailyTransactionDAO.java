@@ -114,6 +114,45 @@ public class DailyTransactionDAO {
     public void delete(int transactionId) {
         db.delete(MILK_TRANSACTION_TABLE, COL_TRANS_ID + " = ?", new String[]{String.valueOf(transactionId)});
     }
+    
+    public void deleteAllForCustomer(long customerId) {
+        db.delete(MILK_TRANSACTION_TABLE, COL_TRANS_CUSTOMER_ID_FK + " = ?", new String[]{String.valueOf(customerId)});
+    }
+
+    public List<DailyTransaction> getTransactionsByDateRange(long customerId, String startDate, String endDate) {
+        List<DailyTransaction> transactionList = new ArrayList<>();
+        String selectQuery = "SELECT * FROM " + MILK_TRANSACTION_TABLE +
+                " WHERE " + COL_TRANS_CUSTOMER_ID_FK + " = ?" +
+                " AND " + COL_TRANS_DATE + " BETWEEN ? AND ?" +
+                " ORDER BY " + COL_TRANS_DATE + " ASC, " + COL_TRANS_ID + " ASC";
+
+        Cursor cursor = db.rawQuery(selectQuery, new String[]{String.valueOf(customerId), startDate, endDate});
+
+        if (cursor.moveToFirst()) {
+            int modeIndex = cursor.getColumnIndex(COL_TRANS_PAYMENT_MODE);
+            int typeIndex = cursor.getColumnIndex(COL_TRANS_MILK_TYPE);
+
+            do {
+                String mode = (modeIndex != -1) ? cursor.getString(modeIndex) : null;
+                String type = (typeIndex != -1) ? cursor.getString(typeIndex) : "Regular";
+
+                DailyTransaction transaction = new DailyTransaction(
+                        cursor.getInt(cursor.getColumnIndexOrThrow(COL_TRANS_ID)),
+                        cursor.getLong(cursor.getColumnIndexOrThrow(COL_TRANS_CUSTOMER_ID_FK)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COL_TRANS_DATE)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COL_TRANS_SESSION)),
+                        cursor.getDouble(cursor.getColumnIndexOrThrow(COL_TRANS_QUANTITY)),
+                        cursor.getDouble(cursor.getColumnIndexOrThrow(COL_TRANS_AMOUNT)),
+                        cursor.getString(cursor.getColumnIndexOrThrow(COL_TRANS_TIMESTAMP)),
+                        mode,
+                        type
+                );
+                transactionList.add(transaction);
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return transactionList;
+    }
 
     // --------------------------------------------------------------------------------
     // REPORTING METHODS

@@ -64,33 +64,64 @@ public class DailyTransactionAdapter extends RecyclerView.Adapter<DailyTransacti
         }
 
         public void bind(DailyTransaction transaction) {
+            // Reset state to avoid recycling artifacts
+            itemView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            itemView.setScaleX(1.0f);
+            itemView.setScaleY(1.0f);
+
+            // Check if transaction is recent (within last 10 seconds)
+            // Use date + timestamp to be precise
+            if (isRecent(transaction.getDate(), transaction.getTimestamp())) {
+                animateHighlight();
+            }
+
             String session = transaction.getSession();
             tvSession.setText(session);
             
-            // Format timestamp
+            // Format timestamp (Display logic)
             String timestamp = transaction.getTimestamp();
-            if (timestamp != null && timestamp.contains("T")) {
+            if (timestamp != null && !timestamp.isEmpty()) {
                  try {
-                     String timePart = timestamp.substring(timestamp.indexOf("T") + 1);
-                     if (timePart.contains(".")) {
-                         timePart = timePart.substring(0, timePart.indexOf("."));
+                     // Check if it's the old format (full ISO with 'T' and nanos) or new HH:mm:ss
+                     java.time.LocalTime timeObj;
+                     if (timestamp.contains("T")) {
+                         // Fallback for old data: 2023-10-27T10:15:30.123
+                         String timePart = timestamp.substring(timestamp.indexOf("T") + 1);
+                         if (timePart.contains(".")) {
+                             timePart = timePart.substring(0, timePart.indexOf("."));
+                         }
+                         timeObj = java.time.LocalTime.parse(timePart); 
+                     } else {
+                         // New format: HH:mm:ss
+                         timeObj = java.time.LocalTime.parse(timestamp);
                      }
-                     tvTime.setText(timePart);
+                     
+                     // Format to 12-hour AM/PM
+                     java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("hh:mm a");
+                     tvTime.setText(timeObj.format(formatter));
+                     
+                     // Fix Session Display: 2 AM to 3 PM is Morning, else Evening
+                     if (session != null && (session.equalsIgnoreCase("Morning") || session.equalsIgnoreCase("Evening"))) {
+                         if (timeObj.getHour() >= 2 && timeObj.getHour() < 15) {
+                             tvSession.setText("Morning");
+                         } else {
+                             tvSession.setText("Evening");
+                         }
+                     }
+                     
                  } catch (Exception e) {
-                     tvTime.setText(timestamp);
+                     tvTime.setText(timestamp); // Fallback to raw string
                  }
             } else {
-                tvTime.setText(timestamp);
+                tvTime.setText("");
             }
 
             if (session != null && session.startsWith("Payment")) {
                 String display = "Payment";
                 
-                // 1. Try to get from separate column
                 if (transaction.getPaymentMode() != null && !transaction.getPaymentMode().isEmpty()) {
                     display += " - " + transaction.getPaymentMode();
                 } 
-                // 2. Fallback: Parse from Session name (e.g. "Payment - Cash") if mostly old data
                 else if (session.contains("-")) {
                     display = session;
                 }
@@ -109,6 +140,47 @@ public class DailyTransactionAdapter extends RecyclerView.Adapter<DailyTransacti
             }
 
             itemView.setOnClickListener(v -> listener.onTransactionClick(transaction));
+        }
+
+        private void animateHighlight() {
+            // Bg Color Animation (Cyan -> Transparent)
+            int colorFrom = android.graphics.Color.parseColor("#E0F7FA");
+            int colorTo = android.graphics.Color.TRANSPARENT;
+            
+            android.animation.ValueAnimator colorAnimation = android.animation.ValueAnimator.ofObject(
+                    new android.animation.ArgbEvaluator(), colorFrom, colorTo);
+            colorAnimation.setDuration(8000); // 8 Seconds fade out
+            colorAnimation.addUpdateListener(animator -> itemView.setBackgroundColor((int) animator.getAnimatedValue()));
+            colorAnimation.start();
+
+            // Scale Animation (1.05 -> 1.0)
+            itemView.setScaleX(1.05f);
+            itemView.setScaleY(1.05f);
+            itemView.animate()
+                    .scaleX(1.0f)
+                    .scaleY(1.0f)
+                    .setDuration(8000)
+                    .start();
+        }
+
+        private boolean isRecent(String dateStr, String timeStr) {
+            try {
+                // Parse Transaction DateTime
+                java.time.LocalDate date = java.time.LocalDate.parse(dateStr); // yyyy-MM-dd
+                java.time.LocalTime time = java.time.LocalTime.parse(timeStr); // HH:mm:ss.SSSSSS (default ISO)
+                java.time.LocalDateTime transDateTime = java.time.LocalDateTime.of(date, time);
+
+                // Current Time
+                java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+                // Diff in seconds
+                long seconds = java.time.Duration.between(transDateTime, now).getSeconds();
+                
+                // Return true if within last 10 seconds
+                return seconds >= 0 && seconds < 10;
+            } catch (Exception e) {
+                return false;
+            }
         }
     }
 }

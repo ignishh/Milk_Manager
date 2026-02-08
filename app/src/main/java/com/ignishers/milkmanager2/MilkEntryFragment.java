@@ -4,7 +4,6 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -80,7 +79,7 @@ public class MilkEntryFragment extends Fragment {
         com.google.android.material.button.MaterialButton manualBtn = view.findViewById(R.id.btnManualEntry);
 
         // Setup Spinner
-        String[] quantities = new String[]{"Add Extra...", "100ml", "250ml", "500ml", "1l", "2l", "10rs", "20rs", "50rs"};
+        String[] quantities = new String[]{"Add Extra...", "250ml", "500ml", "750ml", "1l", "2l", "10rs", "20rs", "50rs"};
         android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(
                 requireContext(),
                 android.R.layout.simple_spinner_item,

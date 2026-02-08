@@ -5,13 +5,13 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F5F5"
     android:fitsSystemWindows="true">
 
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:fitsSystemWindows="true"
         app:statusBarForeground="@color/primary_light">
 
         <com.google.android.material.appbar.MaterialToolbar
@@ -22,10 +22,14 @@
             android:background="@color/primary"
             app:title="Point of Sale"
             app:titleCentered="true"
-            app:titleTextColor="@color/on_secondary" />
+            app:titleTextColor="@color/on_secondary"
+            app:navigationIconTint="@color/on_secondary"
+            android:theme="@style/ThemeOverlay.MaterialComponents.Dark.ActionBar"
+            app:popupTheme="@style/ThemeOverlay.MaterialComponents.Light" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/mainContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
@@ -162,10 +166,31 @@
             app:layout_constraintTop_toBottomOf="@+id/fragmentContainerView">
 
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvTodayEntries"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvCurrentMonthTotal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Current Month Bill: 0.0"
+                    android:textColor="@color/primary"
+                    android:textStyle="bold"
+                    android:padding="8dp"
+                    android:gravity="center_horizontal"/>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#EEEEEE"/>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvTodayEntries"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </LinearLayout>
         </androidx.cardview.widget.CardView>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
